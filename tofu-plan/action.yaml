@@ -1,0 +1,65 @@
+name: Tofu Plan
+description: Run `tofu init` and `tofu plan` across Terramate stacks
+inputs:
+  terramate-flags:
+    description: Extra flags for `terramate run`
+    required: false
+    default: ""
+  tag:
+    description: Terramate tag selecting which stacks to run
+    required: true
+  aws-role-arn:
+    description: AWS role to assume for the Tofu backend
+    required: true
+outputs:
+  summary:
+    description: Summary of the Tofu plan output
+    value: ${{ steps.summary.outputs.summary }}
+runs:
+  using: composite
+  steps:
+  - name: Tofu Init
+    uses: $/tofu-init
+    with:
+      terramate-flags: ${{ inputs.terramate-flags }}
+      tag: ${{ inputs.tag }}
+      aws-role-arn: ${{ inputs.aws-role-arn }}
+  - name: Add tofu-plan.sh to PATH
+    shell: bash
+    run: echo "${{ github.action_path }}/../bin" >> "$GITHUB_PATH"
+  - name: Run Tofu Plan
+    id: plan
+    shell: bash
+    env:
+      TERRAMATE_FLAGS: ${{ inputs.terramate-flags }}
+      TERRAMATE_TAG: ${{ inputs.tag }}
+    run: terramate run $TERRAMATE_FLAGS --parallel 5 --tags "$TERRAMATE_TAG" -- tofu-plan.sh
+  - name: Print Tofu Plan
+    shell: bash
+    env:
+      TERRAMATE_FLAGS: ${{ inputs.terramate-flags }}
+      TERRAMATE_TAG: ${{ inputs.tag }}
+    run: terramate run $TERRAMATE_FLAGS --tags "$TERRAMATE_TAG" -- tofu show tfplan
+  - name: Get Plan Log URL
+    id: url
+    if: always()
+    uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+    with:
+      script: |
+        const getPlanLogUrl = require('${{ github.action_path }}/../scripts/get-plan-log-url.js');
+        await getPlanLogUrl({ github, context, core });
+  - name: Output Plan Summary
+    id: summary
+    if: ${{ always() && steps.plan.outcome != '' && steps.plan.outcome != 'skipped' }}
+    shell: bash
+    env:
+      LOG_URL: ${{ steps.url.outputs.log_url }}
+    run: |
+      if [[ -e _TERRAMATE_OUTPUT_WRITTEN ]]; then
+        echo 'SUMMARY<<EOF' >> "$GITHUB_OUTPUT"
+        {
+          cat _TERRAMATE_OUTPUT_*.txt
+          echo "<small><em>[plan log](${LOG_URL})</em></small>"
+        } | tee -a "$GITHUB_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+        echo 'EOF' >> "$GITHUB_OUTPUT"
+      fi

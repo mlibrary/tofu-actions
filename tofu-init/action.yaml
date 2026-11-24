@@ -1,0 +1,29 @@
+name: Tofu Init
+description: Install tools, then run `tofu init` across Terramate stacks
+inputs:
+  terramate-flags:
+    description: Extra flags for `terramate run`
+    required: false
+    default: ""
+  tag:
+    description: Terramate tag selecting which stacks to run
+    required: true
+  aws-role-arn:
+    description: AWS role to assume for the Tofu backend
+    required: true
+runs:
+  using: composite
+  steps:
+  - name: Install tools
+    uses: $/install-tools
+  - name: Setup AWS Credentials
+    uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+    with:
+      aws-region: us-east-1
+      role-to-assume: ${{ inputs.aws-role-arn }}
+  - name: Run Tofu Init
+    shell: bash
+    env:
+      TERRAMATE_FLAGS: ${{ inputs.terramate-flags }}
+      TERRAMATE_TAG: ${{ inputs.tag }}
+    run: terramate run $TERRAMATE_FLAGS --parallel 5 --tags "$TERRAMATE_TAG" -- tofu init

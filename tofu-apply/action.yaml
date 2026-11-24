@@ -1,0 +1,28 @@
+name: Tofu Apply
+description: Run `tofu init` and `tofu apply` across Terramate stacks
+inputs:
+  terramate-flags:
+    description: Extra flags for `terramate run`
+    required: false
+    default: ""
+  tag:
+    description: Terramate tag selecting which stacks to run
+    required: true
+  aws-role-arn:
+    description: AWS role to assume for the Tofu backend
+    required: true
+runs:
+  using: composite
+  steps:
+  - name: Tofu Init
+    uses: $/tofu-init
+    with:
+      terramate-flags: ${{ inputs.terramate-flags }}
+      tag: ${{ inputs.tag }}
+      aws-role-arn: ${{ inputs.aws-role-arn }}
+  - name: Run Tofu Apply
+    shell: bash
+    env:
+      TERRAMATE_FLAGS: ${{ inputs.terramate-flags }}
+      TERRAMATE_TAG: ${{ inputs.tag }}
+    run: terramate run $TERRAMATE_FLAGS --parallel 5 --tags "$TERRAMATE_TAG" -- tofu apply -auto-approve
